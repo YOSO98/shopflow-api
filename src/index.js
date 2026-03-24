@@ -77,7 +77,7 @@ app.get('/api/v1/products', (req, res) => {
 app.get('/api/v1/products/:id', (req, res) => {
   const { id } = req.params;
   logger.info(`GET /api/v1/products/${id}`, { correlationId: req.headers['x-correlation-id'] });
-  if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' });
+  if (isNaN(id)) { return res.status(400).json({ error: 'ID invalide' }); }
   res.json({ id: parseInt(id), name: `Produit ${id}`, price: 29.99 });
 });
 
