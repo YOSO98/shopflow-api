@@ -1,0 +1,128 @@
+# ─── Valeurs par défaut du Chart Helm ShopFlow API ───────────────────────────
+
+replicaCount: 2
+
+image:
+  repository: shopflow/shopflow-api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ─── Service Account ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# ─── Service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# ─── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.shopflow.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: shopflow-api-tls
+      hosts:
+        - api.shopflow.io
+
+# ─── Resources ────────────────────────────────────────────────────────────────
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# ─── Autoscaling (HPA) ────────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ─── Probes ───────────────────────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# ─── Strategy de déploiement ──────────────────────────────────────────────────
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# ─── Variables d'environnement ────────────────────────────────────────────────
+env:
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"
+
+# ─── Secrets depuis Vault ─────────────────────────────────────────────────────
+vault:
+  enabled: true
+  role: "shopflow-api"
+  secrets:
+    - path: "secret/shopflow/database"
+      key: "DB_PASSWORD"
+    - path: "secret/shopflow/app"
+      key: "JWT_SECRET"
+
+# ─── Monitoring ───────────────────────────────────────────────────────────────
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    path: "/metrics"
+
+# ─── Pod Disruption Budget ────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ─── Node selector / Tolerations ─────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - shopflow-api
+          topologyKey: kubernetes.io/hostname

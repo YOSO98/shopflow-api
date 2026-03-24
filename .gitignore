@@ -1,0 +1,42 @@
+# Node.js
+node_modules/
+npm-debug.log*
+coverage/
+dist/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+!terraform.tfvars.example
+.terraformrc
+
+# Secrets
+*.env
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+kubeconfig
+*-kubeconfig.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Build
+build/
+tmp/

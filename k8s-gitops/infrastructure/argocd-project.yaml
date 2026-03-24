@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shopflow
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "Projet ShopFlow — tous environnements"
+
+  # Dépôts sources autorisés
+  sourceRepos:
+    - "https://github.com/shopflow-org/k8s-gitops.git"
+    - "https://charts.helm.sh/stable"
+    - "https://prometheus-community.github.io/helm-charts"
+
+  # Namespaces cibles autorisés
+  destinations:
+    - namespace: shopflow-staging
+      server: https://kubernetes.default.svc
+    - namespace: shopflow-prod
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  # Ressources Kubernetes autorisées
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+
+  # Ressources namespace autorisées
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: "monitoring.coreos.com"
+      kind: ServiceMonitor
+    - group: "monitoring.coreos.com"
+      kind: PrometheusRule
+
+  # Rôles RBAC ArgoCD
+  roles:
+    - name: developer
+      description: "Lecture seule en prod, déploiement en staging"
+      policies:
+        - p, proj:shopflow:developer, applications, get, shopflow/*, allow
+        - p, proj:shopflow:developer, applications, sync, shopflow/*-staging, allow
+      groups:
+        - shopflow-developers
+    - name: devops
+      description: "Accès complet"
+      policies:
+        - p, proj:shopflow:devops, applications, *, shopflow/*, allow
+      groups:
+        - shopflow-devops
+
+  # Notifications
+  syncWindows:
+    - kind: deny
+      schedule: "0 22 * * 1-5"  # Pas de déploiement prod après 22h en semaine
+      duration: 8h
+      applications:
+        - "*-prod"
+      manualSync: true           # Autoriser si urgence

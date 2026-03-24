@@ -1,0 +1,89 @@
+name: Scan sécurité planifié
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Tous les lundis à 6h
+  workflow_dispatch:      # Déclenchement manuel possible
+
+jobs:
+  dependency-audit:
+    name: Audit dépendances npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Audit npm complet
+        run: npm audit --json > npm-audit.json || true
+      - name: Upload rapport
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: npm-audit.json
+
+  trivy-full-scan:
+    name: Scan Trivy image production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull image de production
+        run: docker pull ${{ secrets.DOCKER_USERNAME }}/shopflow-api:latest
+
+      - name: Scan complet Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ secrets.DOCKER_USERNAME }}/shopflow-api:latest"
+          format: "json"
+          output: "trivy-full.json"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+
+      - name: Upload rapport Trivy
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-full-report
+          path: trivy-full.json
+
+  checkov-iac:
+    name: Scan IaC Terraform (Checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkov scan Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          soft_fail: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-results.sarif
+
+  notify-results:
+    name: Notification résultats
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, trivy-full-scan, checkov-iac]
+    if: always()
+    steps:
+      - name: Résumé vers Slack
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "📊 *Rapport sécurité hebdomadaire ShopFlow*",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "npm audit", "value": "${{ needs.dependency-audit.result }}", "short": true},
+                  {"title": "Trivy scan", "value": "${{ needs.trivy-full-scan.result }}", "short": true},
+                  {"title": "Checkov IaC", "value": "${{ needs.checkov-iac.result }}", "short": true},
+                  {"title": "Rapport complet", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

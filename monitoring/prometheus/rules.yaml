@@ -1,0 +1,123 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shopflow-api-rules
+  namespace: monitoring
+  labels:
+    app: shopflow-api
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    # ─── SLO : Disponibilité ────────────────────────────────────────────────
+    - name: shopflow.slo.availability
+      interval: 30s
+      rules:
+        - record: shopflow:http_availability:rate5m
+          expr: |
+            1 - (
+              sum(rate(http_requests_total{job="shopflow-api", status_code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="shopflow-api"}[5m]))
+            )
+
+        - alert: ShopFlowAvailabilityWarning
+          expr: shopflow:http_availability:rate5m < 0.995
+          for: 2m
+          labels:
+            severity: warning
+            team: devops
+          annotations:
+            summary: "Disponibilité ShopFlow API dégradée"
+            description: "La disponibilité est de {{ $value | humanizePercentage }} (seuil: 99.5%)"
+            runbook_url: "https://wiki.shopflow.io/runbooks/api-availability"
+            dashboard_url: "https://grafana.shopflow.io/d/shopflow-api"
+
+        - alert: ShopFlowAvailabilityCritical
+          expr: shopflow:http_availability:rate5m < 0.99
+          for: 1m
+          labels:
+            severity: critical
+            team: devops
+            pagerduty: "true"
+          annotations:
+            summary: "CRITIQUE — Disponibilité ShopFlow API très dégradée"
+            description: "La disponibilité est de {{ $value | humanizePercentage }} (SLO: 99.9%)"
+            runbook_url: "https://wiki.shopflow.io/runbooks/api-availability"
+
+    # ─── SLO : Latence P95 ──────────────────────────────────────────────────
+    - name: shopflow.slo.latency
+      interval: 30s
+      rules:
+        - record: shopflow:http_latency_p95:rate5m
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_request_duration_ms_bucket{job="shopflow-api"}[5m]))
+            )
+
+        - alert: ShopFlowLatencyWarning
+          expr: shopflow:http_latency_p95:rate5m > 150
+          for: 5m
+          labels:
+            severity: warning
+            team: devops
+          annotations:
+            summary: "Latence P95 ShopFlow élevée"
+            description: "P95 = {{ $value }}ms (seuil: 150ms)"
+
+        - alert: ShopFlowLatencyCritical
+          expr: shopflow:http_latency_p95:rate5m > 500
+          for: 2m
+          labels:
+            severity: critical
+            team: devops
+          annotations:
+            summary: "CRITIQUE — Latence P95 ShopFlow très élevée"
+            description: "P95 = {{ $value }}ms (SLO: 200ms)"
+
+    # ─── Alertes infra ──────────────────────────────────────────────────────
+    - name: shopflow.infrastructure
+      rules:
+        - alert: ShopFlowPodRestarting
+          expr: |
+            rate(kube_pod_container_status_restarts_total{
+              namespace="shopflow-prod",
+              container="shopflow-api"
+            }[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            team: devops
+          annotations:
+            summary: "Pod ShopFlow en redémarrage répété"
+            description: "Le pod {{ $labels.pod }} redémarre fréquemment"
+
+        - alert: ShopFlowCPUHigh
+          expr: |
+            sum by (pod) (
+              rate(container_cpu_usage_seconds_total{
+                namespace="shopflow-prod",
+                container="shopflow-api"
+              }[5m])
+            ) > 0.4
+          for: 10m
+          labels:
+            severity: warning
+            team: devops
+          annotations:
+            summary: "CPU élevé sur ShopFlow API"
+            description: "Le pod {{ $labels.pod }} utilise plus de 80% de sa limite CPU"
+
+        - alert: ShopFlowMemoryHigh
+          expr: |
+            container_memory_usage_bytes{
+              namespace="shopflow-prod",
+              container="shopflow-api"
+            } / container_spec_memory_limit_bytes > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: devops
+          annotations:
+            summary: "Mémoire élevée sur ShopFlow API"
+            description: "Le pod {{ $labels.pod }} utilise plus de 85% de sa limite mémoire"

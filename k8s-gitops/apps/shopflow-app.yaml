@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shopflow-api-prod
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-deployed.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: shopflow
+
+  # ─── Source : repo GitOps ──────────────────────────────────────────────────
+  source:
+    repoURL: https://github.com/shopflow-org/k8s-gitops.git
+    targetRevision: main
+    path: apps/shopflow
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+
+  # ─── Destination : cluster EKS production ─────────────────────────────────
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shopflow-prod
+
+  # ─── Politique de synchronisation ─────────────────────────────────────────
+  syncPolicy:
+    automated:
+      prune: true       # Supprimer les ressources obsolètes
+      selfHeal: true    # Corriger toute dérive manuelle
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # ─── Vérification de l'état de santé ──────────────────────────────────────
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas   # Ignoré car géré par HPA
+
+  revisionHistoryLimit: 10

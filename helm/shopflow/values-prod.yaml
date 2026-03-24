@@ -1,0 +1,45 @@
+# ─── Valeurs spécifiques à l'environnement PRODUCTION ────────────────────────
+
+replicaCount: 3
+
+image:
+  tag: "latest"  # Mis à jour automatiquement par le pipeline CD
+
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: api.shopflow.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: shopflow-prod-tls
+      hosts:
+        - api.shopflow.io
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 200m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+env:
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "warn"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2

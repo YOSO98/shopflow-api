@@ -1,0 +1,113 @@
+{
+  "title": "ShopFlow API — Dashboard SLO",
+  "uid": "shopflow-api-slo",
+  "timezone": "Europe/Paris",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "tags": ["shopflow", "api", "slo"],
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Disponibilité (30j)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "1 - (sum(increase(http_requests_total{job=\"shopflow-api\", status_code=~\"5..\"}[30d])) / sum(increase(http_requests_total{job=\"shopflow-api\"}[30d])))",
+          "legendFormat": "Disponibilité"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Latence P95",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 150 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_ms_bucket{job=\"shopflow-api\"}[5m])))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Requêtes / sec",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"shopflow-api\"}[5m]))",
+          "legendFormat": "RPS"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Taux d'erreur",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"shopflow-api\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"shopflow-api\"}[5m]))",
+          "legendFormat": "Error rate"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Requêtes par code HTTP",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "expr": "sum by (status_code) (rate(http_requests_total{job=\"shopflow-api\"}[1m]))",
+          "legendFormat": "HTTP {{ status_code }}"
+        }
+      ]
+    }
+  ]
+}

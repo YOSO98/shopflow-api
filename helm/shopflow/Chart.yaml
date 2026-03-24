@@ -1,0 +1,16 @@
+apiVersion: v2
+name: shopflow-api
+description: Chart Helm pour l'API ShopFlow — e-commerce platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: ShopFlow DevOps Team
+    email: devops@shopflow.io
+
+keywords:
+  - shopflow
+  - api
+  - nodejs
+  - ecommerce

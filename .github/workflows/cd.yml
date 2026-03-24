@@ -1,0 +1,112 @@
+name: CD — Déploiement Continu
+
+on:
+  workflow_run:
+    workflows: ["CI — Intégration Continue"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy-staging:
+    name: Déploiement Staging
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment:
+      name: staging
+      url: https://staging.shopflow.io
+
+    steps:
+      - name: Checkout repo GitOps
+        uses: actions/checkout@v4
+        with:
+          repository: shopflow-org/k8s-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Mettre à jour le tag image (staging)
+        run: |
+          cd gitops
+          # Mise à jour du tag dans le fichier values staging
+          sed -i "s|tag:.*|tag: \"${{ github.sha }}\"|g" \
+            apps/shopflow/values-staging.yaml
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/shopflow/values-staging.yaml
+          git commit -m "chore(staging): deploy shopflow-api@${{ github.sha }}
+
+          Source: ${{ github.repository }}@${{ github.sha }}
+          Triggered by: ${{ github.actor }}"
+          git push
+
+      - name: Attendre la synchronisation ArgoCD
+        run: |
+          echo "ArgoCD va détecter le changement et synchroniser automatiquement..."
+          echo "Monitoring: https://argocd.shopflow.io/applications/shopflow-staging"
+          sleep 30
+
+      - name: Smoke tests staging
+        run: |
+          max_retries=10
+          count=0
+          until curl -sf https://staging.shopflow.io/health; do
+            echo "Tentative $((count+1))/$max_retries..."
+            sleep 15
+            count=$((count+1))
+            if [ $count -ge $max_retries ]; then
+              echo "Smoke test échoué après $max_retries tentatives"
+              exit 1
+            fi
+          done
+          echo "Staging déployé et opérationnel ✅"
+
+  deploy-production:
+    name: Déploiement Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment:
+      name: production
+      url: https://api.shopflow.io
+
+    steps:
+      - name: Checkout repo GitOps
+        uses: actions/checkout@v4
+        with:
+          repository: shopflow-org/k8s-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Mettre à jour le tag image (production)
+        run: |
+          cd gitops
+          sed -i "s|tag:.*|tag: \"${{ github.sha }}\"|g" \
+            apps/shopflow/values-prod.yaml
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/shopflow/values-prod.yaml
+          git commit -m "chore(prod): deploy shopflow-api@${{ github.sha }}
+
+          Source: ${{ github.repository }}@${{ github.sha }}
+          Triggered by: ${{ github.actor }}
+          Staging validated: ✅"
+          git push
+
+      - name: Notification Slack
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ *ShopFlow API déployée en production*",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Version", "value": "${{ github.sha }}", "short": true},
+                  {"title": "Déployé par", "value": "${{ github.actor }}", "short": true},
+                  {"title": "Environnement", "value": "Production", "short": true},
+                  {"title": "URL", "value": "https://api.shopflow.io", "short": true}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

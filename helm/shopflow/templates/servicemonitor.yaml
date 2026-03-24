@@ -1,0 +1,22 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "shopflow.fullname" . }}
+  labels:
+    {{- include "shopflow.labels" . | nindent 4 }}
+    # Label requis par kube-prometheus-stack pour la découverte
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      {{- include "shopflow.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.monitoring.serviceMonitor.path }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

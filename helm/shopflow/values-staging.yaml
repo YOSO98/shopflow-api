@@ -1,0 +1,34 @@
+# ─── Valeurs spécifiques à l'environnement STAGING ───────────────────────────
+
+replicaCount: 1
+
+image:
+  tag: "latest"  # Mis à jour automatiquement par le pipeline CD
+
+ingress:
+  hosts:
+    - host: staging.shopflow.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: shopflow-staging-tls
+      hosts:
+        - staging.shopflow.io
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+
+env:
+  NODE_ENV: "staging"
+  PORT: "3000"
+  LOG_LEVEL: "debug"
+  APP_VERSION: "staging"
